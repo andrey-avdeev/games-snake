@@ -1,184 +1,306 @@
-﻿function Snake(document,canvas,opts){
+﻿function SnakeGame(control, canvas, options) {
+	var options = defaultOptions(options);
+
 	var ctx = canvas.getContext("2d");
-	var w = canvas.width;
-	var h = canvas.height;
-	
-	var strokeStyle = "white";
+	var w = canvas.clientWidth;
+	var h = canvas.clientHeight;
+	var cw = options.cellWidth;
+	var direction = options.direction;
 
-	function createSnake(){
-
-	}
-
-	function createFood(){
-
-	}
-
-	function drawCell(x,y,color){
-		ctx.fillStyle = color;
-		ctx.fillRect(x*cw, y*cw, cw, cw);
-		ctx.strokeStyle = strokeStyle;
-		ctx.strokeRect(x*cw, y*cw, cw, cw);
-	}
-
-	function checklCollision(x,y){
-		for(var i = 0; i < array.length; i++)
-		{
-			if(array[i].x == x && array[i].y == y)
-				return true;
-		}
-		return false;
-	}
-	
-}
-
-$(document).ready(function(){
-	//Canvas stuff
-	var canvas = $("#canvas")[0];
-	var ctx = canvas.getContext("2d");
-	var w = $("#canvas").width();
-	var h = $("#canvas").height();
-	
-	//Lets save the cell width in a variable for easy control
-	var cw = 10;
-	var d;
+	var snake = [];
 	var food;
+	var portalA;
+	var portalB;
+	var poison = [];
+	var isGameOver;
 	var score;
-	
-	//Lets create the snake now
-	var snake_array; //an array of cells to make up the snake
-	
-	function init()
-	{
-		d = "right"; //default direction
-		create_snake();
-		create_food(); //Now we can see the food particle
-		//finally lets display the score
-		score = 0;
-		
-		//Lets move the snake now using a timer which will trigger the paint function
-		//every 60ms
-		if(typeof game_loop != "undefined") clearInterval(game_loop);
-		game_loop = setInterval(paint, 60);
+	var author = 'Avdeev Andrew';
+
+	this.isGameOver = false;
+	this.isGameStopped = false;
+	this.isGamePaused = false;
+
+	var fps = options.fps;
+	var fpsInterval = 1000 / fps;
+
+	var now, then, elapsed;
+
+	function defaultOptions(o) {
+		if (o === undefined) o = {};
+		//rendering options
+		if (o.r === undefined) o.r = 255;
+		if (o.g === undefined) o.g = 255;
+		if (o.b === undefined) o.b = 255;
+		if (o.alphaDecreaseLevel === undefined) o.alphaDecreaseLevel = 1;
+		if (o.backgroundColor === undefined) o.backgroundColor = 'black';
+		if (o.backgroundStrokeColor === undefined) o.backgroundStrokeColor = 'white';
+		if (o.cellStrokeColor === undefined) o.cellStrokeColor = 'black';
+		if (o.foodColor === undefined) o.foodColor = 'white';
+		if (o.portalColor === undefined) o.portalColor = 'blue';
+		if (o.poisonColor === undefined) o.poisonColor = 'red';
+		if (o.textColor === undefined) o.textColor = 'white';
+		//game mechanic options
+		if (o.fps === undefined) o.fps = 10;
+		if (o.fpsIncreaseLevel === undefined) o.fpsIncreaseLevel = 2;
+		if (o.fpsIncreaseValue === undefined) o.fpsIncreaseValue = 10;
+
+		if (o.increaseDifficultyLevel === undefined) o.increaseDifficultyLevel = 5;
+
+		if (o.portalsRate === undefined) o.portalsRate = 2;
+		if (o.poisonRate === undefined) o.poisonRate = 1;
+
+		if (o.direction === undefined) o.direction = 'r';
+		if (o.headX === undefined) o.headX = 10;
+		if (o.headY === undefined) o.headY = 0;
+		if (o.length === undefined) o.length = 5;
+
+		if (o.cellWidth === undefined) o.cellWidth = 10;
+		if (o.scoreX === undefined) o.scoreX = canvas.clientWidth / 2 - 20;
+		if (o.scoreY === undefined) o.scoreY = canvas.clientHeight / 2;
+
+		if (o.authorX === undefined) o.authorX = 10;
+		if (o.authorY === undefined) o.authorY = canvas.clientHeight - 10;
+		if (o.authorDuration === undefined) o.authorDuration = 2000;
+
+		if (o.helpX === undefined) o.helpX = canvas.clientWidth * 4 / 5;
+		if (o.helpY === undefined) o.helpY = canvas.clientHeight - 10;
+		if (o.helpDuration === undefined) o.helpDuration = 4000;
+
+		return o;
 	}
-	init();
-	
-	function create_snake()
-	{
-		var length = 5; //Length of the snake
-		snake_array = []; //Empty array to start with
-		for(var i = length-1; i>=0; i--)
-		{
-			//This will create a horizontal snake starting from the top left
-			snake_array.push({x: i, y:0});
+
+
+	function Snake(x, y, length, d) {
+		var array = new Array(length);
+		for (var i = 0; i < length; i++) {
+			if (d == 'r') array[i] = { x: x - i, y: y };
+			else if (d == 'l') array[i] = { x: x + i, y: y };
+			else if (d == 'u') array[i] = { x: x, y: y - i };
+			else if (d == 'd') array[i] = { x: x, y: y + i };
 		}
+		return array;
 	}
-	
-	//Lets create the food now
-	function create_food()
-	{
-		food = {
-			x: Math.round(Math.random()*(w-cw)/cw), 
-			y: Math.round(Math.random()*(h-cw)/cw), 
+
+	function Food() {
+		return {
+			x: Math.round(Math.random() * (w - cw) / cw),
+			y: Math.round(Math.random() * (h - cw) / cw),
 		};
-		//This will create a cell with x/y between 0-44
-		//Because there are 45(450/10) positions accross the rows and columns
 	}
-	
-	//Lets paint the snake now
-	function paint()
-	{
-		//To avoid the snake trail we need to paint the BG on every frame
-		//Lets paint the canvas now
-		ctx.fillStyle = "white";
-		ctx.fillRect(0, 0, w, h);
-		ctx.strokeStyle = "black";
-		ctx.strokeRect(0, 0, w, h);
-		
-		//The movement code for the snake to come here.
-		//The logic is simple
-		//Pop out the tail cell and place it infront of the head cell
-		var nx = snake_array[0].x;
-		var ny = snake_array[0].y;
-		//These were the position of the head cell.
-		//We will increment it to get the new head position
-		//Lets add proper direction based movement now
-		if(d == "right") nx++;
-		else if(d == "left") nx--;
-		else if(d == "up") ny--;
-		else if(d == "down") ny++;
-		
-		//Lets add the game over clauses now
-		//This will restart the game if the snake hits the wall
-		//Lets add the code for body collision
-		//Now if the head of the snake bumps into its body, the game will restart
-		if(nx == -1 || nx == w/cw || ny == -1 || ny == h/cw || check_collision(nx, ny, snake_array))
-		{
-			//restart game
-			init();
-			//Lets organize the code a bit now.
-			return;
-		}
-		
-		//Lets write the code to make the snake eat the food
-		//The logic is simple
-		//If the new head position matches with that of the food,
-		//Create a new head instead of moving the tail
-		if(nx == food.x && ny == food.y)
-		{
-			var tail = {x: nx, y: ny};
+	function Portal() {
+		return {
+			x: Math.round(Math.random() * (w - cw) / cw),
+			y: Math.round(Math.random() * (h - cw) / cw),
+		};
+	}
+	function Poison() {
+		return {
+			x: Math.round(Math.random() * (w - cw) / cw),
+			y: Math.round(Math.random() * (h - cw) / cw),
+		};
+	}
+
+	function random(min, max) {
+		return Math.round(Math.random() * (max - min)) + min;
+	}
+	function checkCollision(x, y, array) {
+		var isCollide = false;
+		var i = -1;
+		while (!isCollide && ++i < array.length) if (array[i].x == x && array[i].y == y) isCollide = true;
+		return isCollide;
+	}
+
+	function update() {
+		var nx = snake[0].x;
+		var ny = snake[0].y;
+
+		if (direction == 'r') nx++;
+		else if (direction == 'l') nx--;
+		else if (direction == 'u') ny--;
+		else if (direction == 'd') ny++;
+
+		if (nx == -1
+			|| nx == w / cw
+			|| ny == -1
+			|| ny == h / cw
+			|| checkCollision(nx, ny, snake)
+			|| checkCollision(nx, ny, poison)) isGameOver = true;
+
+		var tail;
+		if (nx == food.x && ny == food.y) {
+			tail = { x: nx, y: ny };
 			score++;
-			//Create new food
-			create_food();
+			food = Food();
 		}
-		else
-		{
-			var tail = snake_array.pop(); //pops out the last cell
+		else {
+			tail = snake.pop();
 			tail.x = nx; tail.y = ny;
 		}
-		//The snake can now eat the food.
-		
-		snake_array.unshift(tail); //puts back the tail as the first cell
-		
-		for(var i = 0; i < snake_array.length; i++)
-		{
-			var c = snake_array[i];
-			//Lets paint 10px wide cells
-			paint_cell(c.x, c.y);
+		snake.unshift(tail);
+
+		if (score >= options.increaseDifficultyLevel) {
+			//poison creation
+			if (random(0, 10) >= 10 / options.poisonRate) poison.push(Poison());
+			//portal creation
+			if (portalA.x < 0 && portalB.x < 0) {
+				if (random(0, 10) >= 10 / options.portalsRate) {
+					portalA = Portal();
+					portalB = Portal();
+				}
+			}
+
+			var nx = snake[0].x;
+			var ny = snake[0].y;
+			if (nx == portalA.x && ny == portalA.y) {
+				head = { x: portalB.x, y: portalB.y };
+				score++;
+				snake.unshift(head);
+				portalA.x = -cw;
+				portalA.y = -cw;
+				portalB.x = -cw;
+				portalB.y = -cw;
+			}
+			if (nx == portalB.x && ny == portalB.y) {
+				head = { x: portalA.x, y: portalA.y };
+				score++;
+				snake.unshift(head);
+				portalA.x = -cw;
+				portalA.y = -cw;
+				portalB.x = -cw;
+				portalB.y = -cw;
+			}
 		}
-		
-		//Lets paint the food
-		paint_cell(food.x, food.y);
-		//Lets paint the score
-		var score_text = "Score: " + score;
-		ctx.fillText(score_text, 5, h-5);
+
+		if (score + 1 % options.fpsIncreaseLevel == 0) fpsInterval = 1000 / (fps + options.fpsIncreaseValue);
 	}
-	
-	function check_collision(x, y, array)
-	{
-		//This function will check if the provided x/y coordinates exist
-		//in an array of cells or not
-		for(var i = 0; i < array.length; i++)
-		{
-			if(array[i].x == x && array[i].y == y)
-				return true;
+
+	function drawCell(x, y, color) {
+		ctx.fillStyle = color;
+		ctx.fillRect(x * cw, y * cw, cw, cw);
+		ctx.strokeStyle = options.cellStrokeColor;
+		ctx.strokeRect(x * cw, y * cw, cw, cw);
+	}
+
+	function render() {
+		//background rendering
+		ctx.font = "11px Arial";
+		ctx.fillStyle = options.backgroundColor;
+		ctx.fillRect(0, 0, w, h);
+		ctx.strokeStyle = options.backgroundStrokeColor;
+		ctx.strokeRect(0, 0, w, h);
+		//snake rendering
+		for (var i = 0; i < snake.length; i++) {
+			drawCell(snake[i].x, snake[i].y, 'rgba(' + options.r + ',' + options.g + ',' + options.b + ',' + (1 - i / (options.alphaDecreaseLevel + snake.length)) + ')');
 		}
-		return false;
+		//food rendering
+		drawCell(food.x, food.y, options.foodColor);
+		//portals rendering
+		drawCell(portalA.x, portalA.y, options.portalColor);
+		drawCell(portalB.x, portalB.y, options.portalColor);
+		//poison rendering
+		for (var i = 0; i < poison.length; i++) {
+			drawCell(poison[i].x, poison[i].y, options.poisonColor);
+		}
+		//score rendering
+		ctx.fillStyle = options.textColor;
+		var scoreText = "Score: " + score;
+		ctx.fillText(scoreText, options.scoreX, options.scoreY);
+		//author rendering
+		if (now - startTime < options.authorDuration) ctx.fillText('Made by ' + author, options.authorX, options.authorY);
+		//help rendering
+		if (now - startTime < options.helpDuration) {
+			var nextLineMargin = 10;
+			var nextLineCounter = 0;
+			var helpText1 = "controls: arrows";
+			var helpText2 = options.poisonColor + ": poison";
+			var helpText3 = options.portalColor + ": teleport";
+			var helpText4 = "p: pause";
+
+			ctx.fillText(helpText4, options.helpX, options.helpY - nextLineMargin * nextLineCounter++);
+			ctx.fillText(helpText3, options.helpX, options.helpY - nextLineMargin * nextLineCounter++);
+			ctx.fillText(helpText2, options.helpX, options.helpY - nextLineMargin * nextLineCounter++);
+			ctx.fillText(helpText1, options.helpX, options.helpY - nextLineMargin * nextLineCounter++);
+		}
 	}
-	
-	//Lets add the keyboard controls now
-	$(document).keydown(function(e){
-		var key = e.which;
-		//We will add another clause to prevent reverse gear
-		if(key == "37" && d != "right") d = "left";
-		else if(key == "38" && d != "down") d = "up";
-		else if(key == "39" && d != "left") d = "right";
-		else if(key == "40" && d != "up") d = "down";
-		//The snake is now keyboard controllable
-	})
-	
-	
-	
-	
-	
-	
-	
+
+	function gameLoop() {
+		now = Date.now();
+		elapsed = now - then;
+
+		if (!isGamePaused) {
+			if (!isGameOver) {
+				if (elapsed > fpsInterval) {
+					then = now - (elapsed % fpsInterval);
+					update();
+					render();
+				}
+			}
+		} else {
+			//pause render
+			ctx.font = "20px Arial";
+			ctx.fillStyle = options.textColor;
+			ctx.fillText("pause", 10, 20);
+		}
+
+		if (isGameOver) this.start();
+		if (!isGameStopped) requestAnimationFrame(gameLoop);
+	}
+
+	function arrowControls(e) {
+		var key = e.keyCode;
+		switch (key) {
+			case 37:
+				if (direction != 'r') direction = 'l';
+				break;
+			case 38:
+				if (direction != 'd') direction = 'u';
+				break;
+			case 39:
+				if (direction != 'l') direction = 'r';
+				break;
+			case 40:
+				if (direction != 'u') direction = 'd';
+				break;
+			case 80:
+				isGamePaused = !isGamePaused;
+				break;
+		}
+	}
+
+	function enableControls(domElement) {
+		domElement.addEventListener("keydown", arrowControls);
+	}
+
+	this.start = function () {
+		score = 0;
+		fps = options.fps;
+		direction = options.direction;
+		isGameOver = false;
+		isGameStopped = false;
+		isGamePaused = false;
+		control.addEventListener("keydown", arrowControls);
+
+		snake = Snake(options.headX, options.headY, options.length, options.direction);
+		food = Food();
+		portalA = { x: -cw, y: -cw };
+		portalB = { x: -cw, y: -cw };
+		poison = [];
+
+		then = Date.now();
+		startTime = then;
+
+		requestAnimationFrame(gameLoop);
+	}
+	this.stop = function () {
+		isGameStopped = true;
+		control.removeEventListener("keydown", arrowControls);
+	}
+	this.pause = function () {
+		isGamePaused = true;
+	}
+	this.resume = function () {
+		isGamePaused = false;
+	}
+
+	return this;
+}
