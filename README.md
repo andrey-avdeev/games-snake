@@ -1,2 +1,3 @@
-# games-snake
-Simple js snake game
+#Snake Game
+
+[Demo](http://aavdeev.com/games/snake/)
